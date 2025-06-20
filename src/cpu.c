@@ -599,6 +599,39 @@ static void cpu_execute_ldy(Cpu *cpu, AddressingMode addressing_mode) {
         cpu, cpu->register_y = cpu_decode_operand(cpu, addressing_mode));
 }
 
+// Transfer accumulator to register X
+static void cpu_execute_tax(Cpu *cpu) {
+    cpu_status_update_zero_and_negative(cpu,
+                                        cpu->register_x = cpu->accumulator);
+}
+
+// Transfer accumulator to register Y
+static void cpu_execute_tay(Cpu *cpu) {
+    cpu_status_update_zero_and_negative(cpu,
+                                        cpu->register_y = cpu->accumulator);
+}
+
+// Transfer stack pointer to register X
+static void cpu_execute_tsx(Cpu *cpu) {
+    cpu_status_update_zero_and_negative(cpu,
+                                        cpu->register_x = cpu->stack_pointer);
+}
+
+// Transfer register X to stack pointer
+static void cpu_execute_txs(Cpu *cpu) { cpu->stack_pointer = cpu->register_x; }
+
+// Transfer register X to accumulator
+static void cpu_execute_txa(Cpu *cpu) {
+    cpu_status_update_zero_and_negative(cpu,
+                                        cpu->accumulator = cpu->register_x);
+}
+
+// Transfer register Y to accumulator
+static void cpu_execute_tya(Cpu *cpu) {
+    cpu_status_update_zero_and_negative(cpu,
+                                        cpu->accumulator = cpu->register_y);
+}
+
 // No-op
 static void cpu_execute_nop(Cpu *cpu) { (void)cpu; }
 
@@ -744,6 +777,13 @@ static void cpu_execute_instruction(Cpu *cpu) {
         CHECK_INSTRUCTION(OP_CLD, cpu_status_clear_decimal_mode, 0x00);
         CHECK_INSTRUCTION(OP_CLI, cpu_status_enable_interrupts, 0x00);
         CHECK_INSTRUCTION(OP_CLV, cpu_status_clear_overflow, 0x00);
+
+        CHECK_INSTRUCTION(OP_TAX, cpu_execute_tax, 0x00);
+        CHECK_INSTRUCTION(OP_TAY, cpu_execute_tay, 0x00);
+        CHECK_INSTRUCTION(OP_TSX, cpu_execute_tsx, 0x00);
+        CHECK_INSTRUCTION(OP_TXA, cpu_execute_txa, 0x00);
+        CHECK_INSTRUCTION(OP_TXS, cpu_execute_txs, 0x00);
+        CHECK_INSTRUCTION(OP_TYA, cpu_execute_tya, 0x00);
 
         CHECK_INSTRUCTION(OP_NOP, cpu_execute_nop, 0x00);
 

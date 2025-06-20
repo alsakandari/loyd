@@ -83,6 +83,12 @@ typedef enum {
     OP_CLD = 0xd8,
     OP_CLI = 0x58,
     OP_CLV = 0xB8,
+    OP_TAX = 0xaa,
+    OP_TAY = 0xa8,
+    OP_TSX = 0xba,
+    OP_TXA = 0x8a,
+    OP_TXS = 0x9a,
+    OP_TYA = 0x98,
 } OpCode;
 
 void cpu_power_on(Cpu *);
