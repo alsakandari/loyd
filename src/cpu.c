@@ -715,7 +715,7 @@ static void cpu_execute_instruction(Cpu *cpu) {
                                   AM_ZERO_PAGE_X);
 
         CHECK_INSTRUCTION_WITH_AM(OP_BIT, cpu_execute_bit, 0x04, AM_ZERO_PAGE);
-        CHECK_INSTRUCTION_WITH_AM(OP_BIT, cpu_execute_bit, 0x06, AM_ABSOLUTE);
+        CHECK_INSTRUCTION_WITH_AM(OP_BIT, cpu_execute_bit, 0x0c, AM_ABSOLUTE);
 
         CHECK_INSTRUCTION(OP_BPL, cpu_execute_bpl, 0x10);
         CHECK_INSTRUCTION(OP_BMI, cpu_execute_bmi, 0x10);
