@@ -89,6 +89,8 @@ typedef enum {
     OP_TXA = 0x8a,
     OP_TXS = 0x9a,
     OP_TYA = 0x98,
+    OP_CPX = 0xe0,
+    OP_CPY = 0xc0,
 } OpCode;
 
 void cpu_power_on(Cpu *);
