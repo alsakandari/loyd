@@ -14,11 +14,10 @@ static void cpu_status_set_carry(Cpu *cpu) { cpu->status |= 1; }
 static void cpu_status_clear_carry(Cpu *cpu) { cpu->status &= ~1; }
 static void cpu_status_set_zero(Cpu *cpu) { cpu->status |= (1 << 1); }
 static void cpu_status_clear_zero(Cpu *cpu) { cpu->status &= ~(1 << 1); }
-// static void cpu_status_enable_interrupt(Cpu *cpu) { cpu->status &= ~(1 << 2);
-// } static void cpu_status_disable_interrupt(Cpu *cpu) { cpu->status |= (1 <<
-// 2); } static void cpu_status_set_decimal_mode(Cpu *cpu) { cpu->status |= (1
-// << 3); } static void cpu_status_clear_decimal_mode(Cpu *cpu) { cpu->status |=
-// (1 << 3); }
+static void cpu_status_enable_interrupts(Cpu *cpu) { cpu->status &= ~(1 << 2); }
+static void cpu_status_disable_interrupts(Cpu *cpu) { cpu->status |= (1 << 2); }
+static void cpu_status_set_decimal_mode(Cpu *cpu) { cpu->status |= (1 << 3); }
+static void cpu_status_clear_decimal_mode(Cpu *cpu) { cpu->status |= (1 << 3); }
 static void cpu_status_set_break(Cpu *cpu) { cpu->status |= (1 << 4); }
 // static void cpu_status_clear_break(Cpu *cpu) { cpu->status |= (1 << 4); }
 static void cpu_status_set_overflow(Cpu *cpu) { cpu->status |= (1 << 6); }
@@ -36,9 +35,7 @@ static bool cpu_status_is_negative(Cpu *cpu) {
     return (cpu->status & (1 << 7)) != 0;
 }
 
-bool cpu_status_is_break(Cpu *cpu) {
-    return (cpu->status & (1 << 4)) != 0;
-}
+bool cpu_status_is_break(Cpu *cpu) { return (cpu->status & (1 << 4)) != 0; }
 
 static bool cpu_status_is_overflow(Cpu *cpu) {
     return (cpu->status & (1 << 6)) != 0;
@@ -642,10 +639,10 @@ static void cpu_execute_instruction(Cpu *cpu) {
 
     switch (instruction) {
         CHECK_INSTRUCTION(OP_BRK, cpu_status_set_break, 0x00);
-        CHECK_INSTRUCTION(OP_PHP, cpu_execute_php, 0x08);
-        CHECK_INSTRUCTION(OP_PLP, cpu_execute_plp, 0x08);
-        CHECK_INSTRUCTION(OP_PHA, cpu_execute_pha, 0x08);
-        CHECK_INSTRUCTION(OP_PLA, cpu_execute_pla, 0x08);
+        CHECK_INSTRUCTION(OP_PHP, cpu_execute_php, 0x00);
+        CHECK_INSTRUCTION(OP_PLP, cpu_execute_plp, 0x00);
+        CHECK_INSTRUCTION(OP_PHA, cpu_execute_pha, 0x00);
+        CHECK_INSTRUCTION(OP_PLA, cpu_execute_pla, 0x00);
         CHECK_INSTRUCTION(OP_JSR, cpu_execute_jsr, 0x00);
         CHECK_INSTRUCTION(OP_RTS, cpu_execute_rts, 0x00);
 
@@ -717,14 +714,14 @@ static void cpu_execute_instruction(Cpu *cpu) {
         CHECK_INSTRUCTION_WITH_AM(OP_BIT, cpu_execute_bit, 0x04, AM_ZERO_PAGE);
         CHECK_INSTRUCTION_WITH_AM(OP_BIT, cpu_execute_bit, 0x0c, AM_ABSOLUTE);
 
-        CHECK_INSTRUCTION(OP_BPL, cpu_execute_bpl, 0x10);
-        CHECK_INSTRUCTION(OP_BMI, cpu_execute_bmi, 0x10);
-        CHECK_INSTRUCTION(OP_BVC, cpu_execute_bvc, 0x10);
-        CHECK_INSTRUCTION(OP_BVS, cpu_execute_bvs, 0x10);
-        CHECK_INSTRUCTION(OP_BCC, cpu_execute_bcc, 0x10);
-        CHECK_INSTRUCTION(OP_BCS, cpu_execute_bcs, 0x10);
-        CHECK_INSTRUCTION(OP_BNE, cpu_execute_bne, 0x10);
-        CHECK_INSTRUCTION(OP_BEQ, cpu_execute_beq, 0x10);
+        CHECK_INSTRUCTION(OP_BPL, cpu_execute_bpl, 0x00);
+        CHECK_INSTRUCTION(OP_BMI, cpu_execute_bmi, 0x00);
+        CHECK_INSTRUCTION(OP_BVC, cpu_execute_bvc, 0x00);
+        CHECK_INSTRUCTION(OP_BVS, cpu_execute_bvs, 0x00);
+        CHECK_INSTRUCTION(OP_BCC, cpu_execute_bcc, 0x00);
+        CHECK_INSTRUCTION(OP_BCS, cpu_execute_bcs, 0x00);
+        CHECK_INSTRUCTION(OP_BNE, cpu_execute_bne, 0x00);
+        CHECK_INSTRUCTION(OP_BEQ, cpu_execute_beq, 0x00);
 
         CHECK_INSTRUCTION_WITH_AM(OP_ISC, cpu_execute_isc, 0x1b, AM_ABSOLUTE_Y);
         CHECK_INSTRUCTION_WITH_AM(OP_ISC, cpu_execute_isc, 0x1f, AM_ABSOLUTE_X);
@@ -739,6 +736,14 @@ static void cpu_execute_instruction(Cpu *cpu) {
         CHECK_INSTRUCTION_WITH_AM(OP_SLO, cpu_execute_slo, 0x13, AM_INDIRECT_Y);
         CHECK_INSTRUCTION_WITH_AM(OP_SLO, cpu_execute_slo, 0x1f, AM_ABSOLUTE_X);
         CHECK_INSTRUCTION_WITH_AM(OP_SLO, cpu_execute_slo, 0x1b, AM_ABSOLUTE_Y);
+
+        CHECK_INSTRUCTION(OP_SEC, cpu_status_set_carry, 0x00);
+        CHECK_INSTRUCTION(OP_SED, cpu_status_set_decimal_mode, 0x00);
+        CHECK_INSTRUCTION(OP_SEI, cpu_status_disable_interrupts, 0x00);
+        CHECK_INSTRUCTION(OP_CLC, cpu_status_clear_carry, 0x00);
+        CHECK_INSTRUCTION(OP_CLD, cpu_status_clear_decimal_mode, 0x00);
+        CHECK_INSTRUCTION(OP_CLI, cpu_status_enable_interrupts, 0x00);
+        CHECK_INSTRUCTION(OP_CLV, cpu_status_clear_overflow, 0x00);
 
         CHECK_INSTRUCTION(OP_NOP, cpu_execute_nop, 0x00);
 
