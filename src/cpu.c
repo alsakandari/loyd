@@ -395,30 +395,65 @@ static void cpu_execute_sbc(Cpu *cpu, AddressingMode addressing_mode) {
     adc(cpu, ~cpu_decode_operand(cpu, addressing_mode));
 }
 
+// Rotate left
+static void cpu_execute_rol(Cpu *cpu, AddressingMode addressing_mode) {
+    uint16_t pointer = cpu_decode_operand_pointer(cpu, addressing_mode);
+
+    uint8_t old_value = cpu_memory_read_byte(cpu, pointer);
+
+    uint8_t new_value = (old_value << 1) | (uint8_t)cpu_status_is_carry(cpu);
+
+    cpu_memory_write_byte(cpu, pointer, new_value);
+
+    if (old_value & (1 << 7)) {
+        cpu_status_set_carry(cpu);
+    } else {
+        cpu_status_clear_carry(cpu);
+    }
+
+    cpu_status_update_zero_and_negative(cpu, new_value);
+}
+
+// Rotate right
+static void cpu_execute_ror(Cpu *cpu, AddressingMode addressing_mode) {
+    uint16_t pointer = cpu_decode_operand_pointer(cpu, addressing_mode);
+
+    uint8_t old_value = cpu_memory_read_byte(cpu, pointer);
+
+    uint8_t new_value =
+        (old_value >> 1) | ((uint8_t)cpu_status_is_carry(cpu) << 7);
+
+    cpu_memory_write_byte(cpu, pointer, new_value);
+
+    if (old_value & 1) {
+        cpu_status_set_carry(cpu);
+    } else {
+        cpu_status_clear_carry(cpu);
+    }
+
+    cpu_status_update_zero_and_negative(cpu, new_value);
+}
+
 // Logical And
 static void cpu_execute_and(Cpu *cpu, AddressingMode addressing_mode) {
-    uint8_t operand = cpu_decode_operand(cpu, addressing_mode);
-    cpu->accumulator &= operand;
-    cpu_status_update_zero_and_negative(cpu, cpu->accumulator);
+    cpu_status_update_zero_and_negative(
+        cpu, cpu->accumulator &= cpu_decode_operand(cpu, addressing_mode));
 }
 
 // Logical Or
 static void cpu_execute_ora(Cpu *cpu, AddressingMode addressing_mode) {
-    uint8_t operand = cpu_decode_operand(cpu, addressing_mode);
-    cpu->accumulator |= operand;
-    cpu_status_update_zero_and_negative(cpu, cpu->accumulator);
+    cpu_status_update_zero_and_negative(
+        cpu, cpu->accumulator |= cpu_decode_operand(cpu, addressing_mode));
 }
 
 // Exclusive Or
 static void cpu_execute_eor(Cpu *cpu, AddressingMode addressing_mode) {
-    uint8_t operand = cpu_decode_operand(cpu, addressing_mode);
-    cpu->accumulator ^= operand;
-    cpu_status_update_zero_and_negative(cpu, cpu->accumulator);
+    cpu_status_update_zero_and_negative(
+        cpu, cpu->accumulator ^= cpu_decode_operand(cpu, addressing_mode));
 }
 
 // Compare lhs with rhs
 static void cmp(Cpu *cpu, uint8_t lhs, uint8_t rhs) {
-
     uint8_t diff = lhs - rhs;
 
     if (lhs >= rhs) {
@@ -455,14 +490,12 @@ static void cpu_execute_inc(Cpu *cpu, AddressingMode addressing_mode) {
 
 // Increment X
 static void cpu_execute_inx(Cpu *cpu) {
-    cpu->register_x += 1;
-    cpu_status_update_zero_and_negative(cpu, cpu->register_x);
+    cpu_status_update_zero_and_negative(cpu, ++cpu->register_x);
 }
 
 // Increment Y
 static void cpu_execute_iny(Cpu *cpu) {
-    cpu->register_y += 1;
-    cpu_status_update_zero_and_negative(cpu, cpu->register_y);
+    cpu_status_update_zero_and_negative(cpu, ++cpu->register_y);
 }
 
 // Decrement
@@ -475,14 +508,12 @@ static void cpu_execute_dec(Cpu *cpu, AddressingMode addressing_mode) {
 
 // Decrement X
 static void cpu_execute_dex(Cpu *cpu) {
-    cpu->register_x -= 1;
-    cpu_status_update_zero_and_negative(cpu, cpu->register_x);
+    cpu_status_update_zero_and_negative(cpu, --cpu->register_x);
 }
 
 // Decrement Y
 static void cpu_execute_dey(Cpu *cpu) {
-    cpu->register_y -= 1;
-    cpu_status_update_zero_and_negative(cpu, cpu->register_y);
+    cpu_status_update_zero_and_negative(cpu, --cpu->register_y);
 }
 
 // Increment then subtract with carry
@@ -743,7 +774,9 @@ static void cpu_execute_instruction(Cpu *cpu) {
         CHECK_INSTRUCTION(OP_TYA, cpu_execute_tya, 0x00);
 
         CHECK_RMW_INSTRUCTION(OP_ASL, cpu_execute_asl);
+        CHECK_RMW_INSTRUCTION(OP_ROL, cpu_execute_rol);
         CHECK_RMW_INSTRUCTION(OP_LSR, cpu_execute_lsr);
+        CHECK_RMW_INSTRUCTION(OP_ROR, cpu_execute_ror);
 
         CHECK_INSTRUCTION_WITH_AM(OP_JMP, cpu_execute_jmp, 0x40, AM_ABSOLUTE);
         CHECK_INSTRUCTION_WITH_AM(OP_JMP, cpu_execute_jmp, 0x60,
