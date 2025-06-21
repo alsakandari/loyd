@@ -678,7 +678,11 @@ static void cpu_execute_tya(Cpu *cpu) {
 }
 
 // No-op
-static void cpu_execute_nop(Cpu *cpu) { (void)cpu; }
+static void cpu_execute_nop(Cpu *cpu, AddressingMode addressing_mode) {
+    if (addressing_mode != AM_IMPLICIT) {
+        cpu_decode_operand(cpu, addressing_mode);
+    }
+}
 
 #define CHECK_INSTRUCTION(code, call, offset)                                  \
     case code + offset:                                                        \
@@ -690,18 +694,18 @@ static void cpu_execute_nop(Cpu *cpu) { (void)cpu; }
         call(cpu, addressing_mode);                                            \
         break
 
-#define CHECK_ALU_INSTRUCTION_NO_IMM(code, call)                               \
+#define CHECK_ALU_INSTRUCTION_NO_AM_IMMEDIATE(code, call)                      \
     CHECK_INSTRUCTION_WITH_AM(code, call, 0x5, AM_ZERO_PAGE);                  \
     CHECK_INSTRUCTION_WITH_AM(code, call, 0x15, AM_ZERO_PAGE_X);               \
     CHECK_INSTRUCTION_WITH_AM(code, call, 0xd, AM_ABSOLUTE);                   \
     CHECK_INSTRUCTION_WITH_AM(code, call, 0x1d, AM_ABSOLUTE_X);                \
     CHECK_INSTRUCTION_WITH_AM(code, call, 0x19, AM_ABSOLUTE_Y);                \
     CHECK_INSTRUCTION_WITH_AM(code, call, 0x1, AM_INDIRECT_X);                 \
-    CHECK_INSTRUCTION_WITH_AM(code, call, 0x11, AM_INDIRECT_Y)
+    CHECK_INSTRUCTION_WITH_AM(code, call, 0x11, AM_INDIRECT_Y);
 
 #define CHECK_ALU_INSTRUCTION(code, call)                                      \
     CHECK_INSTRUCTION_WITH_AM(code, call, 0x9, AM_IMMEDIATE);                  \
-    CHECK_ALU_INSTRUCTION_NO_IMM(code, call)
+    CHECK_ALU_INSTRUCTION_NO_AM_IMMEDIATE(code, call);
 
 #define CHECK_RMW_INSTRUCTION(code, call)                                      \
     CHECK_INSTRUCTION_WITH_AM(code, call, 0x6, AM_ZERO_PAGE);                  \
@@ -731,7 +735,7 @@ static void cpu_execute_instruction(Cpu *cpu) {
         CHECK_ALU_INSTRUCTION(OP_EOR, cpu_execute_eor);
         CHECK_ALU_INSTRUCTION(OP_CMP, cpu_execute_cmp);
 
-        CHECK_ALU_INSTRUCTION_NO_IMM(OP_STA, cpu_execute_sta);
+        CHECK_ALU_INSTRUCTION_NO_AM_IMMEDIATE(OP_STA, cpu_execute_sta);
         CHECK_ALU_INSTRUCTION(OP_LDA, cpu_execute_lda);
 
         CHECK_INSTRUCTION_WITH_AM(OP_LDX, cpu_execute_ldx, 0x02, AM_IMMEDIATE);
@@ -854,7 +858,41 @@ static void cpu_execute_instruction(Cpu *cpu) {
         CHECK_INSTRUCTION(0xd2, cpu_status_set_break, 0x00);
         CHECK_INSTRUCTION(0xf2, cpu_status_set_break, 0x00);
 
-        CHECK_INSTRUCTION(OP_NOP, cpu_execute_nop, 0x00);
+        CHECK_INSTRUCTION_WITH_AM(0xea, cpu_execute_nop, 0x00, AM_IMPLICIT);
+        CHECK_INSTRUCTION_WITH_AM(0x80, cpu_execute_nop, 0x00, AM_IMMEDIATE);
+
+        CHECK_INSTRUCTION_WITH_AM(0x04, cpu_execute_nop, 0x00, AM_ZERO_PAGE);
+        CHECK_INSTRUCTION_WITH_AM(0x44, cpu_execute_nop, 0x00, AM_ZERO_PAGE);
+        CHECK_INSTRUCTION_WITH_AM(0x64, cpu_execute_nop, 0x00, AM_ZERO_PAGE);
+
+        CHECK_INSTRUCTION_WITH_AM(0x0c, cpu_execute_nop, 0x00, AM_ABSOLUTE);
+
+        CHECK_INSTRUCTION_WITH_AM(0x14, cpu_execute_nop, 0x00, AM_ZERO_PAGE_X);
+        CHECK_INSTRUCTION_WITH_AM(0x34, cpu_execute_nop, 0x00, AM_ZERO_PAGE_X);
+        CHECK_INSTRUCTION_WITH_AM(0x54, cpu_execute_nop, 0x00, AM_ZERO_PAGE_X);
+        CHECK_INSTRUCTION_WITH_AM(0x74, cpu_execute_nop, 0x00, AM_ZERO_PAGE_X);
+        CHECK_INSTRUCTION_WITH_AM(0xd4, cpu_execute_nop, 0x00, AM_ZERO_PAGE_X);
+        CHECK_INSTRUCTION_WITH_AM(0xf4, cpu_execute_nop, 0x00, AM_ZERO_PAGE_X);
+
+        CHECK_INSTRUCTION_WITH_AM(0x1c, cpu_execute_nop, 0x00, AM_ABSOLUTE_X);
+        CHECK_INSTRUCTION_WITH_AM(0x3c, cpu_execute_nop, 0x00, AM_ABSOLUTE_X);
+        CHECK_INSTRUCTION_WITH_AM(0x5c, cpu_execute_nop, 0x00, AM_ABSOLUTE_X);
+        CHECK_INSTRUCTION_WITH_AM(0x7c, cpu_execute_nop, 0x00, AM_ABSOLUTE_X);
+        CHECK_INSTRUCTION_WITH_AM(0xdc, cpu_execute_nop, 0x00, AM_ABSOLUTE_X);
+        CHECK_INSTRUCTION_WITH_AM(0xfc, cpu_execute_nop, 0x00, AM_ABSOLUTE_X);
+
+        CHECK_INSTRUCTION_WITH_AM(0x89, cpu_execute_nop, 0x00, AM_IMMEDIATE);
+
+        CHECK_INSTRUCTION_WITH_AM(0x82, cpu_execute_nop, 0x00, AM_IMMEDIATE);
+        CHECK_INSTRUCTION_WITH_AM(0xc2, cpu_execute_nop, 0x00, AM_IMMEDIATE);
+        CHECK_INSTRUCTION_WITH_AM(0xe2, cpu_execute_nop, 0x00, AM_IMMEDIATE);
+
+        CHECK_INSTRUCTION_WITH_AM(0x1a, cpu_execute_nop, 0x00, AM_IMPLICIT);
+        CHECK_INSTRUCTION_WITH_AM(0x3a, cpu_execute_nop, 0x00, AM_IMPLICIT);
+        CHECK_INSTRUCTION_WITH_AM(0x5a, cpu_execute_nop, 0x00, AM_IMPLICIT);
+        CHECK_INSTRUCTION_WITH_AM(0x7a, cpu_execute_nop, 0x00, AM_IMPLICIT);
+        CHECK_INSTRUCTION_WITH_AM(0xda, cpu_execute_nop, 0x00, AM_IMPLICIT);
+        CHECK_INSTRUCTION_WITH_AM(0xfa, cpu_execute_nop, 0x00, AM_IMPLICIT);
 
     default:
         printf("error: unknown instruction with code: 0x%x\n", instruction);

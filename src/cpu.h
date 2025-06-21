@@ -77,7 +77,6 @@ typedef enum {
     OP_LDY = 0xA0,
     OP_SLO = 0x00,
     OP_JMP = 0x0C,
-    OP_NOP = 0xea,
     OP_SEC = 0x38,
     OP_SED = 0xf8,
     OP_SEI = 0x78,
