@@ -840,6 +840,20 @@ static void cpu_execute_instruction(Cpu *cpu) {
         CHECK_INSTRUCTION(OP_CLI, cpu_status_enable_interrupts, 0x00);
         CHECK_INSTRUCTION(OP_CLV, cpu_status_clear_overflow, 0x00);
 
+        // STP instructions
+        CHECK_INSTRUCTION(0x02, cpu_status_set_break, 0x00);
+        CHECK_INSTRUCTION(0x12, cpu_status_set_break, 0x00);
+        CHECK_INSTRUCTION(0x22, cpu_status_set_break, 0x00);
+        CHECK_INSTRUCTION(0x32, cpu_status_set_break, 0x00);
+        CHECK_INSTRUCTION(0x42, cpu_status_set_break, 0x00);
+        CHECK_INSTRUCTION(0x52, cpu_status_set_break, 0x00);
+        CHECK_INSTRUCTION(0x62, cpu_status_set_break, 0x00);
+        CHECK_INSTRUCTION(0x72, cpu_status_set_break, 0x00);
+        CHECK_INSTRUCTION(0x92, cpu_status_set_break, 0x00);
+        CHECK_INSTRUCTION(0xb2, cpu_status_set_break, 0x00);
+        CHECK_INSTRUCTION(0xd2, cpu_status_set_break, 0x00);
+        CHECK_INSTRUCTION(0xf2, cpu_status_set_break, 0x00);
+
         CHECK_INSTRUCTION(OP_NOP, cpu_execute_nop, 0x00);
 
     default:
