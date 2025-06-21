@@ -39,8 +39,7 @@ void nrom_mapper_free(void *context) {
     free(mapper);
 }
 
-Mapper nrom_mapper(uint8_t *prg_rom, uint32_t prg_rom_size, uint8_t *chr_rom,
-                   uint32_t chr_rom_size) {
+Mapper nrom_mapper(uint8_t *prg_rom, uint32_t prg_rom_size, uint8_t *chr_rom, uint32_t chr_rom_size) {
     NromMapper *mapper = malloc(sizeof(NromMapper));
 
     mapper->prg_rom = prg_rom;
