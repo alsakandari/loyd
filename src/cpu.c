@@ -124,7 +124,7 @@ void cpu_load_rom(Cpu *cpu, const char *path) {
 
     memset(cpu->ram, 0, RAM_SIZE);
 
-    cpu->mapper.map_memory(cpu->mapper.context, cpu->ram);
+    cpu->mapper.map_ram(cpu->mapper.context, cpu->ram);
 
     cpu->instruction_pointer = cpu->mapper.description(cpu->mapper.context).instruction_pointer;
 
@@ -154,6 +154,16 @@ static inline void cpu_write_byte(Cpu *cpu, uint16_t pointer, uint8_t byte) {
 
     if (is_io_register(pointer)) {
         return;
+    }
+
+    if (cpu->mapper.register_write != NULL) {
+        MapperDesription mapper_description = cpu->mapper.description(cpu->mapper.context);
+
+        if (mapper_description.registers_start >= pointer && pointer < mapper_description.registers_end) {
+            cpu->mapper.register_write(cpu->mapper.context, pointer, byte);
+
+            return;
+        }
     }
 
     cpu->ram[pointer] = byte;

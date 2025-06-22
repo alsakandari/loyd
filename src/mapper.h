@@ -11,7 +11,7 @@ typedef struct {
 typedef struct {
     void *context;
 
-    void (*map_memory)(void *context, uint8_t *memory);
+    void (*map_ram)(void *context, uint8_t *ram);
 
     void (*register_write)(void *context, uint16_t pointer, uint8_t byte);
 

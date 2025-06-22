@@ -11,13 +11,13 @@ typedef struct {
     uint32_t chr_rom_size;
 } NromMapper;
 
-void nrom_mapper_map_memory(void *context, uint8_t *memory) {
+void nrom_mapper_map_ram(void *context, uint8_t *ram) {
     NromMapper *mapper = context;
 
-    memcpy(memory + 0x8000, mapper->prg_rom, mapper->prg_rom_size);
+    memcpy(ram + 0x8000, mapper->prg_rom, mapper->prg_rom_size);
 
     if (mapper->prg_rom_size == 16 * 1024) {
-        memcpy(memory + 0xC000, mapper->prg_rom, mapper->prg_rom_size);
+        memcpy(ram + 0xC000, mapper->prg_rom, mapper->prg_rom_size);
     }
 }
 
@@ -50,8 +50,9 @@ Mapper nrom_mapper(uint8_t *prg_rom, uint32_t prg_rom_size, uint8_t *chr_rom, ui
 
     return (Mapper){
         .context = mapper,
-        .map_memory = nrom_mapper_map_memory,
+        .map_ram = nrom_mapper_map_ram,
         .description = nrom_mapper_description,
+        .register_write = NULL,
         .free = nrom_mapper_free,
     };
 }
