@@ -56,7 +56,6 @@ typedef enum {
     OP_DEC = 0xC0,
     OP_DEX = 0xCA,
     OP_DEY = 0x88,
-    OP_ISC = 0xE0,
     OP_BPL = 0x10,
     OP_BMI = 0x30,
     OP_BVC = 0x50,
@@ -74,7 +73,6 @@ typedef enum {
     OP_STY = 0x80,
     OP_LDX = 0xA0,
     OP_LDY = 0xA0,
-    OP_SLO = 0x00,
     OP_JMP = 0x0C,
     OP_SEC = 0x38,
     OP_SED = 0xf8,
@@ -91,6 +89,14 @@ typedef enum {
     OP_TYA = 0x98,
     OP_CPX = 0xe0,
     OP_CPY = 0xc0,
+    OP_SLO = 0x00,
+    OP_RLA = 0x20,
+    OP_SRE = 0x40,
+    OP_RRA = 0x60,
+    OP_SAX = 0x80,
+    OP_LAX = 0xA0,
+    OP_DCP = 0xC0,
+    OP_ISC = 0xE0,
 } OpCode;
 
 void cpu_power_on(Cpu *);

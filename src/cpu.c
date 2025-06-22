@@ -396,6 +396,55 @@ static void cpu_execute_ror(Cpu *cpu, AddressingMode addressing_mode) {
     cpu_status_update_zero_and_negative(cpu, new_value);
 }
 
+// Rotate left then perform Logical And on the value
+static void cpu_execute_rla(Cpu *cpu, AddressingMode addressing_mode) {
+    uint16_t pointer = cpu_decode_operand_pointer(cpu, addressing_mode);
+
+    uint8_t old_value = cpu_read_byte(cpu, pointer);
+
+    uint8_t new_value = (old_value << 1) | (uint8_t)cpu_status_is_carry(cpu);
+
+    cpu_write_byte(cpu, pointer, new_value);
+
+    if (old_value & (1 << 7)) {
+        cpu_status_set_carry(cpu);
+    } else {
+        cpu_status_clear_carry(cpu);
+    }
+
+    cpu_status_update_zero_and_negative(cpu, cpu->accumulator &= new_value);
+}
+
+// Rotate left then perform Add with Carry on the value
+static void cpu_execute_rra(Cpu *cpu, AddressingMode addressing_mode) {
+    uint16_t pointer = cpu_decode_operand_pointer(cpu, addressing_mode);
+
+    uint8_t old_value = cpu_read_byte(cpu, pointer);
+
+    uint8_t new_value = (old_value << 1) | (uint8_t)cpu_status_is_carry(cpu);
+
+    cpu_write_byte(cpu, pointer, new_value);
+
+    if (old_value & (1 << 7)) {
+        cpu_status_set_carry(cpu);
+    } else {
+        cpu_status_clear_carry(cpu);
+    }
+
+    adc(cpu, new_value);
+}
+
+// Logical And with accumulator and register X
+static void cpu_execute_sax(Cpu *cpu, AddressingMode addressing_mode) {
+    cpu_write_byte(cpu, cpu_decode_operand_pointer(cpu, addressing_mode), cpu->accumulator & cpu->register_x);
+}
+
+// Load into accumulator and then transfer to register X
+static void cpu_execute_lax(Cpu *cpu, AddressingMode addressing_mode) {
+    cpu_status_update_zero_and_negative(cpu, cpu->register_x = cpu->accumulator =
+                                                 cpu_decode_operand(cpu, addressing_mode));
+}
+
 // Logical And
 static void cpu_execute_and(Cpu *cpu, AddressingMode addressing_mode) {
     cpu_status_update_zero_and_negative(cpu, cpu->accumulator &= cpu_decode_operand(cpu, addressing_mode));
@@ -423,6 +472,16 @@ static void cmp(Cpu *cpu, uint8_t lhs, uint8_t rhs) {
 
     cpu_status_update_zero_and_negative(cpu, diff);
 }
+
+// Decrement value and then compare
+static void cpu_execute_dcp(Cpu *cpu, AddressingMode addressing_mode) {
+    uint16_t pointer = cpu_decode_operand_pointer(cpu, addressing_mode);
+    uint8_t new_value = cpu_read_byte(cpu, pointer) - 1;
+    cpu_write_byte(cpu, pointer, new_value);
+    cpu_status_update_zero_and_negative(cpu, new_value);
+    cmp(cpu, cpu->accumulator, new_value);
+}
+
 
 // Compare accumulator with operand
 static void cpu_execute_cmp(Cpu *cpu, AddressingMode addressing_mode) {
@@ -521,7 +580,7 @@ static void cpu_execute_lsr(Cpu *cpu, AddressingMode addressing_mode) {
     uint16_t operand_pointer = cpu_decode_operand_pointer(cpu, addressing_mode);
     uint8_t operand = cpu_read_byte(cpu, operand_pointer);
 
-    if (operand & (1 << 7)) {
+    if (operand & 1) {
         cpu_status_set_carry(cpu);
     } else {
         cpu_status_clear_carry(cpu);
@@ -534,7 +593,7 @@ static void cpu_execute_lsr(Cpu *cpu, AddressingMode addressing_mode) {
     cpu_status_update_zero_and_negative(cpu, operand);
 }
 
-// Arithmetic shift left then perform logical or with accumulator
+// Arithmetic shift left then perform Logical Or with accumulator
 static void cpu_execute_slo(Cpu *cpu, AddressingMode addressing_mode) {
     uint16_t operand_pointer = cpu_decode_operand_pointer(cpu, addressing_mode);
     uint8_t operand = cpu_read_byte(cpu, operand_pointer);
@@ -549,9 +608,25 @@ static void cpu_execute_slo(Cpu *cpu, AddressingMode addressing_mode) {
 
     cpu_write_byte(cpu, operand_pointer, operand);
 
-    cpu->accumulator |= operand;
+    cpu_status_update_zero_and_negative(cpu, cpu->accumulator |= operand);
+}
 
-    cpu_status_update_zero_and_negative(cpu, cpu->accumulator);
+// Logical shift right then perform perform Logical Exclusive Or with the value
+static void cpu_execute_sre(Cpu *cpu, AddressingMode addressing_mode) {
+    uint16_t operand_pointer = cpu_decode_operand_pointer(cpu, addressing_mode);
+    uint8_t operand = cpu_read_byte(cpu, operand_pointer);
+
+    if (operand & 1) {
+        cpu_status_set_carry(cpu);
+    } else {
+        cpu_status_clear_carry(cpu);
+    }
+
+    operand >>= 1;
+
+    cpu_write_byte(cpu, operand_pointer, operand);
+
+    cpu_status_update_zero_and_negative(cpu, cpu->accumulator ^= operand);
 }
 
 // Jump
@@ -813,9 +888,54 @@ static void cpu_execute_instruction(Cpu *cpu) {
         CHECK_INSTRUCTION_WITH_AM(OP_SLO, cpu_execute_slo, 0x1f, AM_ABSOLUTE_X);
         CHECK_INSTRUCTION_WITH_AM(OP_SLO, cpu_execute_slo, 0x1b, AM_ABSOLUTE_Y);
 
+        CHECK_INSTRUCTION_WITH_AM(OP_RLA, cpu_execute_rla, 0x03, AM_INDIRECT_X);
+        CHECK_INSTRUCTION_WITH_AM(OP_RLA, cpu_execute_rla, 0x07, AM_ZERO_PAGE);
+        CHECK_INSTRUCTION_WITH_AM(OP_RLA, cpu_execute_rla, 0x17, AM_ZERO_PAGE_X);
+        CHECK_INSTRUCTION_WITH_AM(OP_RLA, cpu_execute_rla, 0x0f, AM_ABSOLUTE);
+        CHECK_INSTRUCTION_WITH_AM(OP_RLA, cpu_execute_rla, 0x13, AM_INDIRECT_Y);
+        CHECK_INSTRUCTION_WITH_AM(OP_RLA, cpu_execute_rla, 0x1f, AM_ABSOLUTE_X);
+        CHECK_INSTRUCTION_WITH_AM(OP_RLA, cpu_execute_rla, 0x1b, AM_ABSOLUTE_Y);
+
+        CHECK_INSTRUCTION_WITH_AM(OP_SRE, cpu_execute_sre, 0x03, AM_INDIRECT_X);
+        CHECK_INSTRUCTION_WITH_AM(OP_SRE, cpu_execute_sre, 0x07, AM_ZERO_PAGE);
+        CHECK_INSTRUCTION_WITH_AM(OP_SRE, cpu_execute_sre, 0x17, AM_ZERO_PAGE_X);
+        CHECK_INSTRUCTION_WITH_AM(OP_SRE, cpu_execute_sre, 0x0f, AM_ABSOLUTE);
+        CHECK_INSTRUCTION_WITH_AM(OP_SRE, cpu_execute_sre, 0x13, AM_INDIRECT_Y);
+        CHECK_INSTRUCTION_WITH_AM(OP_SRE, cpu_execute_sre, 0x1f, AM_ABSOLUTE_X);
+        CHECK_INSTRUCTION_WITH_AM(OP_SRE, cpu_execute_sre, 0x1b, AM_ABSOLUTE_Y);
+
+        CHECK_INSTRUCTION_WITH_AM(OP_RRA, cpu_execute_rra, 0x03, AM_INDIRECT_X);
+        CHECK_INSTRUCTION_WITH_AM(OP_RRA, cpu_execute_rra, 0x07, AM_ZERO_PAGE);
+        CHECK_INSTRUCTION_WITH_AM(OP_RRA, cpu_execute_rra, 0x17, AM_ZERO_PAGE_X);
+        CHECK_INSTRUCTION_WITH_AM(OP_RRA, cpu_execute_rra, 0x0f, AM_ABSOLUTE);
+        CHECK_INSTRUCTION_WITH_AM(OP_RRA, cpu_execute_rra, 0x13, AM_INDIRECT_Y);
+        CHECK_INSTRUCTION_WITH_AM(OP_RRA, cpu_execute_rra, 0x1f, AM_ABSOLUTE_X);
+        CHECK_INSTRUCTION_WITH_AM(OP_RRA, cpu_execute_rra, 0x1b, AM_ABSOLUTE_Y);
+
+        CHECK_INSTRUCTION_WITH_AM(OP_SAX, cpu_execute_sax, 0x03, AM_INDIRECT_X);
+        CHECK_INSTRUCTION_WITH_AM(OP_SAX, cpu_execute_sax, 0x07, AM_ZERO_PAGE);
+        CHECK_INSTRUCTION_WITH_AM(OP_SAX, cpu_execute_sax, 0x17, AM_ZERO_PAGE_X);
+        CHECK_INSTRUCTION_WITH_AM(OP_SAX, cpu_execute_sax, 0x0f, AM_ABSOLUTE);
+
+        CHECK_INSTRUCTION_WITH_AM(OP_LAX, cpu_execute_lax, 0x03, AM_INDIRECT_X);
+        CHECK_INSTRUCTION_WITH_AM(OP_LAX, cpu_execute_lax, 0x0b, AM_IMMEDIATE);
+        CHECK_INSTRUCTION_WITH_AM(OP_LAX, cpu_execute_lax, 0x07, AM_ZERO_PAGE);
+        CHECK_INSTRUCTION_WITH_AM(OP_LAX, cpu_execute_lax, 0x17, AM_ZERO_PAGE_X);
+        CHECK_INSTRUCTION_WITH_AM(OP_LAX, cpu_execute_lax, 0x0f, AM_ABSOLUTE);
+        CHECK_INSTRUCTION_WITH_AM(OP_LAX, cpu_execute_lax, 0x13, AM_INDIRECT_Y);
+        CHECK_INSTRUCTION_WITH_AM(OP_LAX, cpu_execute_lax, 0x1f, AM_ABSOLUTE_X);
+
+        CHECK_INSTRUCTION_WITH_AM(OP_DCP, cpu_execute_dcp, 0x03, AM_INDIRECT_X);
+        CHECK_INSTRUCTION_WITH_AM(OP_DCP, cpu_execute_dcp, 0x07, AM_ZERO_PAGE);
+        CHECK_INSTRUCTION_WITH_AM(OP_DCP, cpu_execute_dcp, 0x17, AM_ZERO_PAGE_X);
+        CHECK_INSTRUCTION_WITH_AM(OP_DCP, cpu_execute_dcp, 0x0f, AM_ABSOLUTE);
+        CHECK_INSTRUCTION_WITH_AM(OP_DCP, cpu_execute_dcp, 0x13, AM_INDIRECT_Y);
+        CHECK_INSTRUCTION_WITH_AM(OP_DCP, cpu_execute_dcp, 0x1f, AM_ABSOLUTE_X);
+        CHECK_INSTRUCTION_WITH_AM(OP_DCP, cpu_execute_dcp, 0x1b, AM_ABSOLUTE_Y);
+
         CHECK_INSTRUCTION_WITH_AM(OP_ISC, cpu_execute_isc, 0x03, AM_INDIRECT_X);
         CHECK_INSTRUCTION_WITH_AM(OP_ISC, cpu_execute_isc, 0x07, AM_ZERO_PAGE);
-        CHECK_INSTRUCTION_WITH_AM(OP_SBC, cpu_execute_isc, 0x0b, AM_IMMEDIATE);
+        CHECK_INSTRUCTION_WITH_AM(OP_SBC, cpu_execute_sbc, 0x0b, AM_IMMEDIATE);
         CHECK_INSTRUCTION_WITH_AM(OP_ISC, cpu_execute_isc, 0x0f, AM_ABSOLUTE);
         CHECK_INSTRUCTION_WITH_AM(OP_ISC, cpu_execute_isc, 0x13, AM_INDIRECT_Y);
         CHECK_INSTRUCTION_WITH_AM(OP_ISC, cpu_execute_isc, 0x17, AM_ZERO_PAGE_X);
