@@ -5,10 +5,10 @@
 
 #include "mapper.h"
 
-#define MEMORY_SIZE 0xFFFF
+#define RAM_SIZE 0xFFFF
 
 typedef struct {
-    uint8_t memory[MEMORY_SIZE];
+    uint8_t ram[RAM_SIZE];
     uint16_t internal_clock;
     uint16_t instruction_pointer;
     uint8_t status;
@@ -42,7 +42,6 @@ typedef enum {
     OP_PLA = 0x68,
     OP_JSR = 0x20,
     OP_BIT = 0x20,
-    OP_BRK = 0x00,
     OP_ORA = 0x00,
     OP_AND = 0x20,
     OP_EOR = 0x40,
@@ -52,11 +51,11 @@ typedef enum {
     OP_CMP = 0xC0,
     OP_SBC = 0xE0,
     OP_INC = 0xE0,
-    OP_INX = 0xE0,
-    OP_INY = 0xC0,
+    OP_INX = 0xE8,
+    OP_INY = 0xC8,
     OP_DEC = 0xC0,
-    OP_DEX = 0xC0,
-    OP_DEY = 0x80,
+    OP_DEX = 0xCA,
+    OP_DEY = 0x88,
     OP_ISC = 0xE0,
     OP_BPL = 0x10,
     OP_BMI = 0x30,
@@ -97,4 +96,4 @@ typedef enum {
 void cpu_power_on(Cpu *);
 void cpu_load_rom(Cpu *, const char *path);
 void cpu_sync(Cpu *, uint16_t master_clock);
-bool cpu_status_is_break(Cpu *);
+bool cpu_stopped(Cpu *);

@@ -14,25 +14,18 @@ static void cpu_status_set_carry(Cpu *cpu) { cpu->status |= 1; }
 static void cpu_status_clear_carry(Cpu *cpu) { cpu->status &= ~1; }
 static void cpu_status_set_zero(Cpu *cpu) { cpu->status |= (1 << 1); }
 static void cpu_status_clear_zero(Cpu *cpu) { cpu->status &= ~(1 << 1); }
-static void cpu_status_enable_interrupts(Cpu *cpu) { cpu->status &= ~(1 << 2); }
 static void cpu_status_disable_interrupts(Cpu *cpu) { cpu->status |= (1 << 2); }
+static void cpu_status_enable_interrupts(Cpu *cpu) { cpu->status &= ~(1 << 2); }
 static void cpu_status_set_decimal_mode(Cpu *cpu) { cpu->status |= (1 << 3); }
-static void cpu_status_clear_decimal_mode(Cpu *cpu) { cpu->status |= (1 << 3); }
-static void cpu_status_set_break(Cpu *cpu) { cpu->status |= (1 << 4); }
-// static void cpu_status_clear_break(Cpu *cpu) { cpu->status |= (1 << 4); }
+static void cpu_status_clear_decimal_mode(Cpu *cpu) { cpu->status &= ~(1 << 3); }
 static void cpu_status_set_overflow(Cpu *cpu) { cpu->status |= (1 << 6); }
-static void cpu_status_clear_overflow(Cpu *cpu) { cpu->status |= (1 << 6); }
+static void cpu_status_clear_overflow(Cpu *cpu) { cpu->status &= ~(1 << 6); }
 static void cpu_status_set_negative(Cpu *cpu) { cpu->status |= (1 << 7); }
-static void cpu_status_clear_negative(Cpu *cpu) { cpu->status |= (1 << 7); }
+static void cpu_status_clear_negative(Cpu *cpu) { cpu->status &= ~(1 << 7); }
 
 static bool cpu_status_is_carry(Cpu *cpu) { return cpu->status & 1; }
-
 static bool cpu_status_is_zero(Cpu *cpu) { return (cpu->status & (1 << 1)) != 0; }
-
 static bool cpu_status_is_negative(Cpu *cpu) { return (cpu->status & (1 << 7)) != 0; }
-
-bool cpu_status_is_break(Cpu *cpu) { return (cpu->status & (1 << 4)) != 0; }
-
 static bool cpu_status_is_overflow(Cpu *cpu) { return (cpu->status & (1 << 6)) != 0; }
 
 static void cpu_status_update_zero_and_negative(Cpu *cpu, uint8_t i) {
@@ -49,14 +42,14 @@ static void cpu_status_update_zero_and_negative(Cpu *cpu, uint8_t i) {
     }
 }
 
+bool cpu_stopped(Cpu *cpu) { return (cpu->status & (1 << 4)) != 0; }
+static void cpu_stop(Cpu *cpu) { cpu->status |= (1 << 4); }
+static void cpu_start(Cpu *cpu) { cpu->status &= ~(1 << 4); }
+
 void cpu_power_on(Cpu *cpu) {
     cpu->stack_pointer = 0xFD;
-
-    memset(cpu->memory, 0, MEMORY_SIZE);
-
-    cpu->mapper.map_memory(cpu->mapper.context, cpu->memory);
-
-    cpu->instruction_pointer = cpu->mapper.description(cpu->mapper.context).instruction_pointer;
+    cpu->status = 0x34;
+    cpu->instruction_pointer = cpu->accumulator = cpu->register_x = cpu->register_y = 0;
 }
 
 void cpu_load_rom(Cpu *cpu, const char *path) {
@@ -128,6 +121,14 @@ void cpu_load_rom(Cpu *cpu, const char *path) {
         printf("error: unsupported mapper: %d\n", mapper_id);
         exit(1);
     }
+
+    memset(cpu->ram, 0, RAM_SIZE);
+
+    cpu->mapper.map_memory(cpu->mapper.context, cpu->ram);
+
+    cpu->instruction_pointer = cpu->mapper.description(cpu->mapper.context).instruction_pointer;
+
+    cpu_start(cpu);
 }
 
 static inline void mirror_pointer(uint16_t *pointer) {
@@ -148,48 +149,37 @@ static inline bool is_io_register(uint16_t pointer) {
     }
 }
 
-static inline void cpu_memory_write_byte(Cpu *cpu, uint16_t pointer, uint8_t byte) {
+static inline void cpu_write_byte(Cpu *cpu, uint16_t pointer, uint8_t byte) {
     mirror_pointer(&pointer);
 
     if (is_io_register(pointer)) {
         return;
     }
 
-    cpu->memory[pointer] = byte;
+    cpu->ram[pointer] = byte;
 }
 
-static inline uint8_t cpu_memory_read_byte(Cpu *cpu, uint16_t pointer) {
+static inline uint8_t cpu_read_byte(Cpu *cpu, uint16_t pointer) {
     mirror_pointer(&pointer);
 
     if (is_io_register(pointer)) {
         return 0;
     }
 
-    return cpu->memory[pointer];
+    return cpu->ram[pointer];
 }
 
-// static inline void cpu_memory_write_word(Cpu *cpu, uint16_t address,
-//                                          uint16_t word) {
-//     uint8_t lsb = word & 0xFF;
-//     uint8_t hsb = (word >> 8) & 0xFF;
-//
-//     cpu_memory_write_byte(cpu, address, lsb);
-//     cpu_memory_write_byte(cpu, address, hsb);
-// }
-
-static inline uint16_t cpu_memory_read_word(Cpu *cpu, uint16_t pointer) {
-    uint16_t lsb = cpu_memory_read_byte(cpu, pointer);
-    uint16_t hsb = cpu_memory_read_byte(cpu, pointer + 1);
+static inline uint16_t cpu_read_word(Cpu *cpu, uint16_t pointer) {
+    uint16_t lsb = cpu_read_byte(cpu, pointer);
+    uint16_t hsb = cpu_read_byte(cpu, pointer + 1);
 
     return (hsb << 8) | lsb;
 }
 
-static inline uint8_t cpu_decode_byte(Cpu *cpu) {
-    return cpu_memory_read_byte(cpu, cpu->instruction_pointer++);
-}
+static inline uint8_t cpu_decode_byte(Cpu *cpu) { return cpu_read_byte(cpu, cpu->instruction_pointer++); }
 
 static inline uint16_t cpu_decode_word(Cpu *cpu) {
-    uint16_t word = cpu_memory_read_word(cpu, cpu->instruction_pointer);
+    uint16_t word = cpu_read_word(cpu, cpu->instruction_pointer);
     cpu->instruction_pointer += 2;
     return word;
 }
@@ -219,16 +209,15 @@ static uint16_t cpu_decode_operand_pointer(Cpu *cpu, AddressingMode addressing_m
         if ((pointer & 0xff) == 0xff) {
             // Account for JMP hardware bug
             // http://wiki.nesdev.com/w/index.php/Errata
-            return cpu_memory_read_byte(cpu, pointer) +
-                   (((uint16_t)cpu_memory_read_byte(cpu, pointer & 0xff00)) << 8);
+            return cpu_read_byte(cpu, pointer) + (((uint16_t)cpu_read_byte(cpu, pointer & 0xff00)) << 8);
         } else {
-            return cpu_memory_read_word(cpu, pointer);
+            return cpu_read_word(cpu, pointer);
         }
     }
     case AM_INDIRECT_X:
-        return cpu_memory_read_word(cpu, cpu_decode_byte(cpu) + cpu->register_x);
+        return cpu_read_word(cpu, cpu_decode_byte(cpu) + cpu->register_x);
     case AM_INDIRECT_Y:
-        return cpu_memory_read_word(cpu, cpu_decode_byte(cpu)) + cpu->register_y;
+        return cpu_read_word(cpu, cpu_decode_byte(cpu)) + cpu->register_y;
 
     default:
         printf("error: unknown addressing mode: %d\n", addressing_mode);
@@ -239,14 +228,12 @@ static uint16_t cpu_decode_operand_pointer(Cpu *cpu, AddressingMode addressing_m
 }
 
 static inline uint8_t cpu_decode_operand(Cpu *cpu, AddressingMode addressing_mode) {
-    return cpu_memory_read_byte(cpu, cpu_decode_operand_pointer(cpu, addressing_mode));
+    return cpu_read_byte(cpu, cpu_decode_operand_pointer(cpu, addressing_mode));
 }
 
-static inline void cpu_push_byte(Cpu *cpu, uint8_t byte) {
-    cpu_memory_write_byte(cpu, cpu->stack_pointer--, byte);
-}
+static inline void cpu_push_byte(Cpu *cpu, uint8_t byte) { cpu_write_byte(cpu, cpu->stack_pointer--, byte); }
 
-static inline uint8_t cpu_pull_byte(Cpu *cpu) { return cpu_memory_read_byte(cpu, ++cpu->stack_pointer); }
+static inline uint8_t cpu_pull_byte(Cpu *cpu) { return cpu_read_byte(cpu, ++cpu->stack_pointer); }
 
 static inline void cpu_push_word(Cpu *cpu, uint16_t word) {
     uint8_t lsb = word;
@@ -261,8 +248,6 @@ static inline uint16_t cpu_pull_word(Cpu *cpu) {
     return (hsb << 8) | lsb;
 }
 
-// Add with carry implementation, separated from execution code, to be used with
-// subtraction too
 static void adc(Cpu *cpu, uint8_t rhs) {
     uint8_t lhs = cpu->accumulator;
 
@@ -367,11 +352,11 @@ static void cpu_execute_sbc(Cpu *cpu, AddressingMode addressing_mode) {
 static void cpu_execute_rol(Cpu *cpu, AddressingMode addressing_mode) {
     uint16_t pointer = cpu_decode_operand_pointer(cpu, addressing_mode);
 
-    uint8_t old_value = cpu_memory_read_byte(cpu, pointer);
+    uint8_t old_value = cpu_read_byte(cpu, pointer);
 
     uint8_t new_value = (old_value << 1) | (uint8_t)cpu_status_is_carry(cpu);
 
-    cpu_memory_write_byte(cpu, pointer, new_value);
+    cpu_write_byte(cpu, pointer, new_value);
 
     if (old_value & (1 << 7)) {
         cpu_status_set_carry(cpu);
@@ -386,11 +371,11 @@ static void cpu_execute_rol(Cpu *cpu, AddressingMode addressing_mode) {
 static void cpu_execute_ror(Cpu *cpu, AddressingMode addressing_mode) {
     uint16_t pointer = cpu_decode_operand_pointer(cpu, addressing_mode);
 
-    uint8_t old_value = cpu_memory_read_byte(cpu, pointer);
+    uint8_t old_value = cpu_read_byte(cpu, pointer);
 
     uint8_t new_value = (old_value >> 1) | ((uint8_t)cpu_status_is_carry(cpu) << 7);
 
-    cpu_memory_write_byte(cpu, pointer, new_value);
+    cpu_write_byte(cpu, pointer, new_value);
 
     if (old_value & 1) {
         cpu_status_set_carry(cpu);
@@ -447,8 +432,8 @@ static void cpu_execute_cpy(Cpu *cpu, AddressingMode addressing_mode) {
 // Increment
 static void cpu_execute_inc(Cpu *cpu, AddressingMode addressing_mode) {
     uint16_t pointer = cpu_decode_operand_pointer(cpu, addressing_mode);
-    uint8_t new_value = cpu_memory_read_byte(cpu, pointer) + 1;
-    cpu_memory_write_byte(cpu, pointer, new_value);
+    uint8_t new_value = cpu_read_byte(cpu, pointer) + 1;
+    cpu_write_byte(cpu, pointer, new_value);
     cpu_status_update_zero_and_negative(cpu, new_value);
 }
 
@@ -461,8 +446,8 @@ static void cpu_execute_iny(Cpu *cpu) { cpu_status_update_zero_and_negative(cpu,
 // Decrement
 static void cpu_execute_dec(Cpu *cpu, AddressingMode addressing_mode) {
     uint16_t pointer = cpu_decode_operand_pointer(cpu, addressing_mode);
-    uint8_t new_value = cpu_memory_read_byte(cpu, pointer) - 1;
-    cpu_memory_write_byte(cpu, pointer, new_value);
+    uint8_t new_value = cpu_read_byte(cpu, pointer) - 1;
+    cpu_write_byte(cpu, pointer, new_value);
     cpu_status_update_zero_and_negative(cpu, new_value);
 }
 
@@ -475,8 +460,8 @@ static void cpu_execute_dey(Cpu *cpu) { cpu_status_update_zero_and_negative(cpu,
 // Increment then subtract with carry
 static void cpu_execute_isc(Cpu *cpu, AddressingMode addressing_mode) {
     uint16_t pointer = cpu_decode_operand_pointer(cpu, addressing_mode);
-    uint8_t new_value = cpu_memory_read_byte(cpu, pointer) + 1;
-    cpu_memory_write_byte(cpu, pointer, new_value);
+    uint8_t new_value = cpu_read_byte(cpu, pointer) + 1;
+    cpu_write_byte(cpu, pointer, new_value);
     adc(cpu, ~new_value);
 }
 
@@ -506,7 +491,7 @@ static void cpu_execute_bit(Cpu *cpu, AddressingMode addressing_mode) {
 // Arithmetic shift left
 static void cpu_execute_asl(Cpu *cpu, AddressingMode addressing_mode) {
     uint16_t operand_pointer = cpu_decode_operand_pointer(cpu, addressing_mode);
-    uint8_t operand = cpu_memory_read_byte(cpu, operand_pointer);
+    uint8_t operand = cpu_read_byte(cpu, operand_pointer);
 
     if (operand & (1 << 7)) {
         cpu_status_set_carry(cpu);
@@ -516,7 +501,7 @@ static void cpu_execute_asl(Cpu *cpu, AddressingMode addressing_mode) {
 
     operand <<= 1;
 
-    cpu_memory_write_byte(cpu, operand_pointer, operand);
+    cpu_write_byte(cpu, operand_pointer, operand);
 
     cpu_status_update_zero_and_negative(cpu, operand);
 }
@@ -524,7 +509,7 @@ static void cpu_execute_asl(Cpu *cpu, AddressingMode addressing_mode) {
 // Logical shift right
 static void cpu_execute_lsr(Cpu *cpu, AddressingMode addressing_mode) {
     uint16_t operand_pointer = cpu_decode_operand_pointer(cpu, addressing_mode);
-    uint8_t operand = cpu_memory_read_byte(cpu, operand_pointer);
+    uint8_t operand = cpu_read_byte(cpu, operand_pointer);
 
     if (operand & (1 << 7)) {
         cpu_status_set_carry(cpu);
@@ -534,7 +519,7 @@ static void cpu_execute_lsr(Cpu *cpu, AddressingMode addressing_mode) {
 
     operand >>= 1;
 
-    cpu_memory_write_byte(cpu, operand_pointer, operand);
+    cpu_write_byte(cpu, operand_pointer, operand);
 
     cpu_status_update_zero_and_negative(cpu, operand);
 }
@@ -542,7 +527,7 @@ static void cpu_execute_lsr(Cpu *cpu, AddressingMode addressing_mode) {
 // Arithmetic shift left then perform logical or with accumulator
 static void cpu_execute_slo(Cpu *cpu, AddressingMode addressing_mode) {
     uint16_t operand_pointer = cpu_decode_operand_pointer(cpu, addressing_mode);
-    uint8_t operand = cpu_memory_read_byte(cpu, operand_pointer);
+    uint8_t operand = cpu_read_byte(cpu, operand_pointer);
 
     if (operand & (1 << 7)) {
         cpu_status_set_carry(cpu);
@@ -552,7 +537,7 @@ static void cpu_execute_slo(Cpu *cpu, AddressingMode addressing_mode) {
 
     operand <<= 1;
 
-    cpu_memory_write_byte(cpu, operand_pointer, operand);
+    cpu_write_byte(cpu, operand_pointer, operand);
 
     cpu->accumulator |= operand;
 
@@ -566,7 +551,7 @@ static void cpu_execute_jmp(Cpu *cpu, AddressingMode addressing_mode) {
 
 // Store accumulator
 static void cpu_execute_sta(Cpu *cpu, AddressingMode addressing_mode) {
-    cpu_memory_write_byte(cpu, cpu_decode_operand_pointer(cpu, addressing_mode), cpu->accumulator);
+    cpu_write_byte(cpu, cpu_decode_operand_pointer(cpu, addressing_mode), cpu->accumulator);
 }
 
 // Load accumulator
@@ -576,7 +561,7 @@ static void cpu_execute_lda(Cpu *cpu, AddressingMode addressing_mode) {
 
 // Store X register
 static void cpu_execute_stx(Cpu *cpu, AddressingMode addressing_mode) {
-    cpu_memory_write_byte(cpu, cpu_decode_operand_pointer(cpu, addressing_mode), cpu->register_x);
+    cpu_write_byte(cpu, cpu_decode_operand_pointer(cpu, addressing_mode), cpu->register_x);
 }
 
 // Load X register
@@ -586,7 +571,7 @@ static void cpu_execute_ldx(Cpu *cpu, AddressingMode addressing_mode) {
 
 // Store Y register
 static void cpu_execute_sty(Cpu *cpu, AddressingMode addressing_mode) {
-    cpu_memory_write_byte(cpu, cpu_decode_operand_pointer(cpu, addressing_mode), cpu->register_y);
+    cpu_write_byte(cpu, cpu_decode_operand_pointer(cpu, addressing_mode), cpu->register_y);
 }
 
 // Load Y register
@@ -629,8 +614,8 @@ static void cpu_execute_nop(Cpu *cpu, AddressingMode addressing_mode) {
     }
 }
 
-#define CHECK_INSTRUCTION(code, call, offset)                                                                \
-    case code + offset:                                                                                      \
+#define CHECK_INSTRUCTION(code, call)                                                                        \
+    case code:                                                                                               \
         call(cpu);                                                                                           \
         break
 
@@ -660,18 +645,17 @@ static void cpu_execute_nop(Cpu *cpu, AddressingMode addressing_mode) {
     CHECK_INSTRUCTION_WITH_AM(code, call, 0xa, AM_ACCUMULATOR);
 
 static void cpu_execute_instruction(Cpu *cpu) {
-    uint8_t instruction = cpu_memory_read_byte(cpu, cpu->instruction_pointer);
+    uint8_t instruction = cpu_read_byte(cpu, cpu->instruction_pointer);
 
     cpu->instruction_pointer++;
 
     switch (instruction) {
-        CHECK_INSTRUCTION(OP_BRK, cpu_status_set_break, 0x00);
-        CHECK_INSTRUCTION(OP_PHP, cpu_execute_php, 0x00);
-        CHECK_INSTRUCTION(OP_PLP, cpu_execute_plp, 0x00);
-        CHECK_INSTRUCTION(OP_PHA, cpu_execute_pha, 0x00);
-        CHECK_INSTRUCTION(OP_PLA, cpu_execute_pla, 0x00);
-        CHECK_INSTRUCTION(OP_JSR, cpu_execute_jsr, 0x00);
-        CHECK_INSTRUCTION(OP_RTS, cpu_execute_rts, 0x00);
+        CHECK_INSTRUCTION(OP_PHP, cpu_execute_php);
+        CHECK_INSTRUCTION(OP_PLP, cpu_execute_plp);
+        CHECK_INSTRUCTION(OP_PHA, cpu_execute_pha);
+        CHECK_INSTRUCTION(OP_PLA, cpu_execute_pla);
+        CHECK_INSTRUCTION(OP_JSR, cpu_execute_jsr);
+        CHECK_INSTRUCTION(OP_RTS, cpu_execute_rts);
 
         CHECK_ALU_INSTRUCTION(OP_ADC, cpu_execute_adc);
         CHECK_ALU_INSTRUCTION(OP_SBC, cpu_execute_sbc);
@@ -715,36 +699,36 @@ static void cpu_execute_instruction(Cpu *cpu) {
         CHECK_INSTRUCTION_WITH_AM(OP_CPY, cpu_execute_cpy, 0x04, AM_ZERO_PAGE);
         CHECK_INSTRUCTION_WITH_AM(OP_CPY, cpu_execute_cpy, 0x0c, AM_ABSOLUTE);
 
-        CHECK_INSTRUCTION(OP_TAX, cpu_execute_tax, 0x00);
-        CHECK_INSTRUCTION(OP_TAY, cpu_execute_tay, 0x00);
-        CHECK_INSTRUCTION(OP_TSX, cpu_execute_tsx, 0x00);
-        CHECK_INSTRUCTION(OP_TXA, cpu_execute_txa, 0x00);
-        CHECK_INSTRUCTION(OP_TXS, cpu_execute_txs, 0x00);
-        CHECK_INSTRUCTION(OP_TYA, cpu_execute_tya, 0x00);
+        CHECK_INSTRUCTION(OP_TAX, cpu_execute_tax);
+        CHECK_INSTRUCTION(OP_TAY, cpu_execute_tay);
+        CHECK_INSTRUCTION(OP_TSX, cpu_execute_tsx);
+        CHECK_INSTRUCTION(OP_TXA, cpu_execute_txa);
+        CHECK_INSTRUCTION(OP_TXS, cpu_execute_txs);
+        CHECK_INSTRUCTION(OP_TYA, cpu_execute_tya);
 
         CHECK_INSTRUCTION_WITH_AM(OP_INC, cpu_execute_inc, 0x06, AM_ZERO_PAGE);
         CHECK_INSTRUCTION_WITH_AM(OP_INC, cpu_execute_inc, 0x0e, AM_ABSOLUTE);
         CHECK_INSTRUCTION_WITH_AM(OP_INC, cpu_execute_inc, 0x16, AM_ZERO_PAGE_X);
         CHECK_INSTRUCTION_WITH_AM(OP_INC, cpu_execute_inc, 0x1e, AM_ABSOLUTE_X);
 
-        CHECK_INSTRUCTION(OP_INX, cpu_execute_inx, 0x08);
-        CHECK_INSTRUCTION(OP_INY, cpu_execute_iny, 0x08);
+        CHECK_INSTRUCTION(OP_INX, cpu_execute_inx);
+        CHECK_INSTRUCTION(OP_INY, cpu_execute_iny);
 
         CHECK_INSTRUCTION_WITH_AM(OP_DEC, cpu_execute_dec, 0x06, AM_ZERO_PAGE);
         CHECK_INSTRUCTION_WITH_AM(OP_DEC, cpu_execute_dec, 0x16, AM_ZERO_PAGE_X);
         CHECK_INSTRUCTION_WITH_AM(OP_DEC, cpu_execute_dec, 0x0e, AM_ABSOLUTE);
         CHECK_INSTRUCTION_WITH_AM(OP_DEC, cpu_execute_dec, 0x1e, AM_ABSOLUTE_X);
 
-        CHECK_INSTRUCTION(OP_DEX, cpu_execute_dex, 0x0a);
-        CHECK_INSTRUCTION(OP_DEY, cpu_execute_dey, 0x08);
+        CHECK_INSTRUCTION(OP_DEX, cpu_execute_dex);
+        CHECK_INSTRUCTION(OP_DEY, cpu_execute_dey);
 
-        CHECK_INSTRUCTION(OP_SEC, cpu_status_set_carry, 0x00);
-        CHECK_INSTRUCTION(OP_SED, cpu_status_set_decimal_mode, 0x00);
-        CHECK_INSTRUCTION(OP_SEI, cpu_status_disable_interrupts, 0x00);
-        CHECK_INSTRUCTION(OP_CLC, cpu_status_clear_carry, 0x00);
-        CHECK_INSTRUCTION(OP_CLD, cpu_status_clear_decimal_mode, 0x00);
-        CHECK_INSTRUCTION(OP_CLI, cpu_status_enable_interrupts, 0x00);
-        CHECK_INSTRUCTION(OP_CLV, cpu_status_clear_overflow, 0x00);
+        CHECK_INSTRUCTION(OP_SEC, cpu_status_set_carry);
+        CHECK_INSTRUCTION(OP_SED, cpu_status_set_decimal_mode);
+        CHECK_INSTRUCTION(OP_SEI, cpu_status_disable_interrupts);
+        CHECK_INSTRUCTION(OP_CLC, cpu_status_clear_carry);
+        CHECK_INSTRUCTION(OP_CLD, cpu_status_clear_decimal_mode);
+        CHECK_INSTRUCTION(OP_CLI, cpu_status_enable_interrupts);
+        CHECK_INSTRUCTION(OP_CLV, cpu_status_clear_overflow);
 
         CHECK_INSTRUCTION_WITH_AM(OP_JMP, cpu_execute_jmp, 0x40, AM_ABSOLUTE);
         CHECK_INSTRUCTION_WITH_AM(OP_JMP, cpu_execute_jmp, 0x60, AM_INDIRECT_JMP);
@@ -752,28 +736,28 @@ static void cpu_execute_instruction(Cpu *cpu) {
         CHECK_INSTRUCTION_WITH_AM(OP_BIT, cpu_execute_bit, 0x04, AM_ZERO_PAGE);
         CHECK_INSTRUCTION_WITH_AM(OP_BIT, cpu_execute_bit, 0x0c, AM_ABSOLUTE);
 
-        CHECK_INSTRUCTION(OP_BPL, cpu_execute_bpl, 0x00);
-        CHECK_INSTRUCTION(OP_BMI, cpu_execute_bmi, 0x00);
-        CHECK_INSTRUCTION(OP_BVC, cpu_execute_bvc, 0x00);
-        CHECK_INSTRUCTION(OP_BVS, cpu_execute_bvs, 0x00);
-        CHECK_INSTRUCTION(OP_BCC, cpu_execute_bcc, 0x00);
-        CHECK_INSTRUCTION(OP_BCS, cpu_execute_bcs, 0x00);
-        CHECK_INSTRUCTION(OP_BNE, cpu_execute_bne, 0x00);
-        CHECK_INSTRUCTION(OP_BEQ, cpu_execute_beq, 0x00);
+        CHECK_INSTRUCTION(OP_BPL, cpu_execute_bpl);
+        CHECK_INSTRUCTION(OP_BMI, cpu_execute_bmi);
+        CHECK_INSTRUCTION(OP_BVC, cpu_execute_bvc);
+        CHECK_INSTRUCTION(OP_BVS, cpu_execute_bvs);
+        CHECK_INSTRUCTION(OP_BCC, cpu_execute_bcc);
+        CHECK_INSTRUCTION(OP_BCS, cpu_execute_bcs);
+        CHECK_INSTRUCTION(OP_BNE, cpu_execute_bne);
+        CHECK_INSTRUCTION(OP_BEQ, cpu_execute_beq);
 
-        // STP instructions
-        CHECK_INSTRUCTION(0x02, cpu_status_set_break, 0x00);
-        CHECK_INSTRUCTION(0x12, cpu_status_set_break, 0x00);
-        CHECK_INSTRUCTION(0x22, cpu_status_set_break, 0x00);
-        CHECK_INSTRUCTION(0x32, cpu_status_set_break, 0x00);
-        CHECK_INSTRUCTION(0x42, cpu_status_set_break, 0x00);
-        CHECK_INSTRUCTION(0x52, cpu_status_set_break, 0x00);
-        CHECK_INSTRUCTION(0x62, cpu_status_set_break, 0x00);
-        CHECK_INSTRUCTION(0x72, cpu_status_set_break, 0x00);
-        CHECK_INSTRUCTION(0x92, cpu_status_set_break, 0x00);
-        CHECK_INSTRUCTION(0xb2, cpu_status_set_break, 0x00);
-        CHECK_INSTRUCTION(0xd2, cpu_status_set_break, 0x00);
-        CHECK_INSTRUCTION(0xf2, cpu_status_set_break, 0x00);
+        CHECK_INSTRUCTION(0x00, cpu_stop);
+        CHECK_INSTRUCTION(0x02, cpu_stop);
+        CHECK_INSTRUCTION(0x12, cpu_stop);
+        CHECK_INSTRUCTION(0x22, cpu_stop);
+        CHECK_INSTRUCTION(0x32, cpu_stop);
+        CHECK_INSTRUCTION(0x42, cpu_stop);
+        CHECK_INSTRUCTION(0x52, cpu_stop);
+        CHECK_INSTRUCTION(0x62, cpu_stop);
+        CHECK_INSTRUCTION(0x72, cpu_stop);
+        CHECK_INSTRUCTION(0x92, cpu_stop);
+        CHECK_INSTRUCTION(0xb2, cpu_stop);
+        CHECK_INSTRUCTION(0xd2, cpu_stop);
+        CHECK_INSTRUCTION(0xf2, cpu_stop);
 
         CHECK_INSTRUCTION_WITH_AM(0xea, cpu_execute_nop, 0x00, AM_IMPLICIT);
         CHECK_INSTRUCTION_WITH_AM(0x80, cpu_execute_nop, 0x00, AM_IMMEDIATE);
@@ -834,7 +818,7 @@ static void cpu_execute_instruction(Cpu *cpu) {
 }
 
 void cpu_sync(Cpu *cpu, uint16_t master_clock) {
-    while (!cpu_status_is_break(cpu) && cpu->internal_clock < master_clock) {
+    while (!cpu_stopped(cpu) && cpu->internal_clock < master_clock) {
         cpu_execute_instruction(cpu);
 
         cpu->internal_clock++;

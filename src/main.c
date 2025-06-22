@@ -16,9 +16,11 @@ int main(int argc, const char *argv[]) {
 
     Emulator emulator = {0};
 
-    emulator_power_on(&emulator, rom_path);
+    emulator_power_on(&emulator);
 
-    while (!cpu_status_is_break(&emulator.cpu)) {
+    emulator_load_rom(&emulator, rom_path);
+
+    while (!emulator_stopped(&emulator)) {
         emulator_step(&emulator, 1024);
     }
 }
